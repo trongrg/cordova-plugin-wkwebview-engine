@@ -68,7 +68,11 @@
 
         self.webServer = [[GCDWebServer alloc] init];
         [self.webServer addGETHandlerForBasePath:@"/" directoryPath:@"/" indexFilename:nil cacheAge:3600 allowRangeRequests:YES];
-        [self.webServer startWithPort:8080 bonjourName:nil];
+        NSMutableDictionary* options = [NSMutableDictionary dictionary];
+        [options setObject:[NSNumber numberWithInteger:8080] forKey:GCDWebServerOption_Port];
+        [options setValue:nil forKey:GCDWebServerOption_BonjourName];
+        [options setValue:@YES forKey:GCDWebServerOption_BindToLocalhost];
+        [self.webServer startWithOptions:options error:NULL];
     }
 
     return self;
