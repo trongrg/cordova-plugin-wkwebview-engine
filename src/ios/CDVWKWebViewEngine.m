@@ -19,6 +19,7 @@
 
 #import "CDVWKWebViewEngine.h"
 #import "CDVWKWebViewUIDelegate.h"
+#import "CDVWKProcessPoolFactory.h"
 #import <Cordova/NSDictionary+CordovaPreferences.h>
 #import <MobileCoreServices/MobileCoreServices.h>
 #import <objc/message.h>
@@ -81,6 +82,7 @@
 - (WKWebViewConfiguration*) createConfigurationFromSettings:(NSDictionary*)settings
 {
     WKWebViewConfiguration* configuration = [[WKWebViewConfiguration alloc] init];
+    configuration.processPool = [[CDVWKProcessPoolFactory sharedFactory] sharedProcessPool];
     if (settings == nil) {
         return configuration;
     }
@@ -89,7 +91,6 @@
     configuration.mediaPlaybackRequiresUserAction = [settings cordovaBoolSettingForKey:@"MediaPlaybackRequiresUserAction" defaultValue:YES];
     configuration.suppressesIncrementalRendering = [settings cordovaBoolSettingForKey:@"SuppressesIncrementalRendering" defaultValue:NO];
     configuration.mediaPlaybackAllowsAirPlay = [settings cordovaBoolSettingForKey:@"MediaPlaybackAllowsAirPlay" defaultValue:YES];
-
     return configuration;
 }
 
@@ -303,6 +304,8 @@ static void * KVOContext = &KVOContext;
     } else {
         [wkWebView.scrollView setDecelerationRate:UIScrollViewDecelerationRateFast];
     }
+
+    wkWebView.allowsBackForwardNavigationGestures = [settings cordovaBoolSettingForKey:@"AllowBackForwardNavigationGestures" defaultValue:NO];
 }
 
 - (void)updateWithInfo:(NSDictionary*)info
@@ -452,6 +455,11 @@ static void * KVOContext = &KVOContext;
     [[NSNotificationCenter defaultCenter] postNotification:[NSNotification notificationWithName:CDVPageDidLoadNotification object:webView]];
 }
 
+- (void)webView:(WKWebView*)theWebView didFailProvisionalNavigation:(WKNavigation*)navigation withError:(NSError*)error
+{
+    [self webView:theWebView didFailNavigation:navigation withError:error];
+}
+
 - (void)webView:(WKWebView*)theWebView didFailNavigation:(WKNavigation*)navigation withError:(NSError*)error
 {
     CDVViewController* vc = (CDVViewController*)self.viewController;
@@ -500,7 +508,12 @@ static void * KVOContext = &KVOContext;
         SEL selector = NSSelectorFromString(@"shouldOverrideLoadWithRequest:navigationType:");
         if ([plugin respondsToSelector:selector]) {
             anyPluginsResponded = YES;
-            shouldAllowRequest = (((BOOL (*)(id, SEL, id, int))objc_msgSend)(plugin, selector, navigationAction.request, navigationAction.navigationType));
+            // https://issues.apache.org/jira/browse/CB-12497
+            int navType = (int)navigationAction.navigationType;
+            if (WKNavigationTypeOther == navigationAction.navigationType) {
+                navType = (int)UIWebViewNavigationTypeOther;
+            }
+            shouldAllowRequest = (((BOOL (*)(id, SEL, id, int))objc_msgSend)(plugin, selector, navigationAction.request, navType));
             if (!shouldAllowRequest) {
                 break;
             }
